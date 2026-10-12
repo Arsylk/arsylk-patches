@@ -1,14 +1,13 @@
-group = "app.template"
+group = "dev.arsylk.fosspatch"
 
 patches {
-    // TODO: Update this section with your project details.
     about {
-        name = "UserXYZ Patches"
-        description = "Patches for apps I like"
-        source = "git@github.com:UserXYZ/morphe-patches.git"
-        author = "Awesome dev"
-        contact = "na"
-        website = "na"
+        name = "Arsylk Patches"
+        description = "Android modding should always be free, this is a repo that tries to bring that idea back instead of being another $10/month subscription, enjoy ~"
+        source = "https://github.com/Arsylk/arsylk-patches"
+        author = "Arsylk"
+        contact = "https://github.com/Arsylk/arsylk-patches/issues"
+        website = "https://github.com/Arsylk/arsylk-patches"
         license = "GPLv3"
     }
 }
