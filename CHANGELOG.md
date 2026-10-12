@@ -1,3 +1,9 @@
+## [1.0.0-dev.3](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.2...v1.0.0-dev.3) (2026-10-12)
+
+### 🐛 Bug Fixes
+
+* Give 1.7.2 Hide My Android patch full coverage (premium StateFlow init) ([08eea42](https://github.com/Arsylk/arsylk-patches/commit/08eea4237babf3bfebfe18e1a6a614600b0d7dab))
+
 ## [1.0.0-dev.2](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.1...v1.0.0-dev.2) (2026-10-12)
 
 ### ✨ New Features
