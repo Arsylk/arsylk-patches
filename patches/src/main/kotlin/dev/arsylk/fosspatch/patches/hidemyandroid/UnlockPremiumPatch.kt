@@ -29,6 +29,14 @@ private data class HmaPins(
     /** Cached signed-licence blob identity — step 5 inserts `const-string "1"` before the
      *  `iput-object` into its `<init>`. */
     val blobClass: String,
+    /**
+     * (Optional) Obfuscated classes whose `sget-object Ljava/lang/Boolean;->FALSE` loads gate
+     * the premium state on a token/account being present. Every such load in these classes is
+     * the initial value of the premium `StateFlow`, its no-token emission, or a token-refresh
+     * failure emission — rewriting them all to `Boolean.TRUE` makes the premium state TRUE
+     * regardless of whether the user is signed in.
+     */
+    val tokenCheckClasses: List<String> = emptyList(),
 )
 
 /**
@@ -201,6 +209,47 @@ private fun BytecodePatchContext.applyHmaUnlock(pins: HmaPins, rewritePremiumFlo
     // 6. Neutralise the native anti-tamper so the re-signed APK is not killed at startup.
     BootstrapRuntimeCallerFingerprint.method.addInstructions(0, "return-void")
     InstallWatchdogCallerFingerprint.method.addInstructions(0, "return-void")
+
+    // 7. (Optional, 1.7.2+) Skip every token / signed-in gate on the premium state.
+    //
+    //    In 1.7.2 the premium state lives in a `MutableStateFlow` (`Lqa/z0;->j:Lgd/h0;`) that is
+    //    CREATED with `Boolean.FALSE` (constructor), and every no-token / token-refresh-failure
+    //    path in the StartupRepository emits `Boolean.FALSE` into it — so without a signed-in
+    //    account the flow never carries TRUE and the settings items (Backup to ZIP, Restore
+    //    from ZIP, Headless API) stay PRO-locked. Rewriting every
+    //    `sget-object Ljava/lang/Boolean;->FALSE` in the pinned classes to `Boolean.TRUE` makes
+    //    the flow start TRUE and stay TRUE through every guest/failure path, unlocking the
+    //    settings without an account. The validate coroutine's no-token early return is in
+    //    `Lqa/v0;` (same rewrite) so the authenticated path also reports premium.
+    val tokenCheckClasses = pins.tokenCheckClasses
+    if (tokenCheckClasses.isNotEmpty()) {
+        classDefForEach { classDef ->
+            if (classDef.type !in tokenCheckClasses) return@classDefForEach
+            val mutable = mutableClassDefBy(classDef)
+            classDef.methods.forEach { method ->
+                val impl = method.implementation ?: return@forEach
+                val original = impl.instructions.toList()
+                original.indices.filter { i ->
+                    val insn = original[i]
+                    if (insn.opcode != Opcode.SGET_OBJECT) return@filter false
+                    val ref = (insn as? ReferenceInstruction)?.reference as? FieldReference
+                        ?: return@filter false
+                    ref.definingClass == "Ljava/lang/Boolean;" && ref.name == "FALSE"
+                }.sortedDescending().forEach { i ->
+                    val mutableMethod = mutable.methods.first {
+                        it.name == method.name &&
+                            it.returnType == method.returnType &&
+                            it.parameterTypes.toList() == method.parameterTypes.toList()
+                    }
+                    val reg = mutableMethod.getInstruction<OneRegisterInstruction>(i).registerA
+                    mutableMethod.replaceInstruction(
+                        i,
+                        "sget-object v$reg, Ljava/lang/Boolean;->TRUE:Ljava/lang/Boolean;",
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -236,7 +285,12 @@ val unlockPremiumPatch172 = bytecodePatch(
     compatibleWith(COMPATIBILITY_HIDEMYANDROID_172)
     execute {
         applyHmaUnlock(
-            pins = HmaPins(flagClass = "Lcb/h;", flagName = "c", blobClass = "Lxa/k;"),
+            pins = HmaPins(
+                flagClass = "Lcb/h;",
+                flagName = "c",
+                blobClass = "Lxa/k;",
+                tokenCheckClasses = listOf("Lqa/v0;", "Lqa/z0;"),
+            ),
             rewritePremiumFlow = false,
         )
     }
