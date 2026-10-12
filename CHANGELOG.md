@@ -1,3 +1,9 @@
+## [1.0.0-dev.5](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.4...v1.0.0-dev.5) (2026-10-12)
+
+### ✨ New Features
+
+* Skip token and signed-in gates so premium works without an account ([cecb461](https://github.com/Arsylk/arsylk-patches/commit/cecb46170f431900fd96b1f2e15b2ef03d976aa2))
+
 ## [1.0.0-dev.4](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.3...v1.0.0-dev.4) (2026-10-12)
 
 ### 🐛 Bug Fixes

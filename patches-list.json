@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.0.0-dev.4",
+  "version": "1.0.0-dev.5",
   "patches": [
     {
       "name": "Unlock premium",
@@ -18,10 +18,10 @@
           "signatures": null,
           "targets": [
             {
-              "version": "1.7.1",
+              "version": "1.7.2",
               "versionCodes": {
-                "ARM64_V8A": 171,
-                "ARMEABI_V7A": 171
+                "ARM64_V8A": 172,
+                "ARMEABI_V7A": 172
               },
               "isExperimental": false,
               "minSdk": null,
@@ -48,10 +48,10 @@
           "signatures": null,
           "targets": [
             {
-              "version": "1.7.2",
+              "version": "1.7.1",
               "versionCodes": {
-                "ARM64_V8A": 172,
-                "ARMEABI_V7A": 172
+                "ARM64_V8A": 171,
+                "ARMEABI_V7A": 171
               },
               "isExperimental": false,
               "minSdk": null,

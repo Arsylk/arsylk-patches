@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-12T07:06:42",
-  "description": "## [1.0.0-dev.4](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.3...v1.0.0-dev.4) (2026-10-12)\n\n### 🐛 Bug Fixes\n\n* Remove broken 1.7.2 flow init rewrite (VerifyError on launch) ([d6a46ff](https://github.com/Arsylk/arsylk-patches/commit/d6a46ff3458a62ced476fc45baa2391f040e088f))",
-  "download_url": "https://github.com/Arsylk/arsylk-patches/releases/download/v1.0.0-dev.4/patches-1.0.0-dev.4.mpp",
+  "created_at": "2026-10-12T08:48:19",
+  "description": "## [1.0.0-dev.5](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.4...v1.0.0-dev.5) (2026-10-12)\n\n### ✨ New Features\n\n* Skip token and signed-in gates so premium works without an account ([cecb461](https://github.com/Arsylk/arsylk-patches/commit/cecb46170f431900fd96b1f2e15b2ef03d976aa2))",
+  "download_url": "https://github.com/Arsylk/arsylk-patches/releases/download/v1.0.0-dev.5/patches-1.0.0-dev.5.mpp",
   "signature_download_url": "",
-  "version": "1.0.0-dev.4"
+  "version": "1.0.0-dev.5"
 }
