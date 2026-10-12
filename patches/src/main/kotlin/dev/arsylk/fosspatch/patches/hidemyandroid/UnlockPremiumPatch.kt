@@ -1,128 +1,115 @@
 package dev.arsylk.fosspatch.patches.hidemyandroid
 
-import dev.arsylk.fosspatch.patches.shared.Constants.COMPATIBILITY_HIDEMYANDROID
+import dev.arsylk.fosspatch.patches.shared.Constants.COMPATIBILITY_HIDEMYANDROID_171
+import dev.arsylk.fosspatch.patches.shared.Constants.COMPATIBILITY_HIDEMYANDROID_172
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
-import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 /**
- * Restores the premium feature set of Hide My Android (unlimited profiles, no daily-create cap,
- * full identifier spoofing, headless API) without a subscription or even an account, and works
- * fully offline.
- *
- * Premium runs through one native call, `DeviceInfoProvider.evalBlobNative(...)`, surfaced by a thin
- * Kotlin wrapper (see [EvalBlobWrapperFingerprint]). Four coordinated changes:
- *
- *  1. The wrapper is forced to return `true`, so the headless-API check and the in-process
- *     `NativeHooker` full-identifier-spoofing gate (which call it directly) report premium.
- *
- *  2. The volatile premium flag that the profile caps read is only set by the startup coroutine
- *     after a session token exists, so with no account it stays false. Every `iget-boolean` read of
- *     it is forced to `true` — so the caps lift regardless of login state.
- *
- *  3. The account badge and profile counter observe a separate StateFlow, which the account
- *     view-model fills with `false` on the account-less path. Every `Boolean.FALSE` load feeding
- *     that flow is rewritten to `Boolean.TRUE`, so the UI renders premium too.
- *
- *  4. The app self-checks its integrity in native code (`bootstrapRuntime` verifies the signing
- *     certificate and APK hash; `installWatchdog` starts an anti-tamper watchdog). A re-signed
- *     patched APK fails those checks and the native code terminates the process at startup. Morphe
- *     cannot patch the `.so`, so the two Kotlin methods that invoke them are turned into no-ops.
- *
- * Only the DEX is modified.
+ * Per-version pinned obfuscated references. Non-obfuscated anchors
+ * ([EvalBlobWrapperFingerprint], [BootstrapRuntimeCallerFingerprint],
+ * [InstallWatchdogCallerFingerprint], and the `evalBlobNative` method name in step 4) survive
+ * across versions because they key off the `DeviceInfoProvider` JNI surface, which R8 cannot
+ * rename. The three pins below are the only things that move between obfuscation passes.
  */
-@Suppress("unused")
-val unlockPremiumPatch = bytecodePatch(
-    name = "Unlock premium",
-    description = "Unlocks the premium feature set offline, without a subscription.",
-    default = true,
-) {
-    compatibleWith(COMPATIBILITY_HIDEMYANDROID)
+private data class HmaPins(
+    /** LicenseStore premium flag — read in step 2 (rewritten to `const/4 1`). */
+    val flagClass: String,
+    val flagName: String,
+    /** Cached signed-licence blob identity — step 5 inserts `const-string "1"` before the
+     *  `iput-object` into its `<init>`. */
+    val blobClass: String,
+)
 
-    execute {
-        // 1. Native-verdict wrapper always reports premium (headless + NativeHooker paths).
-        EvalBlobWrapperFingerprint.method.addInstructions(
-            0,
-            """
-                const/4 v0, 0x1
-                return v0
-            """,
-        )
+/**
+ * Shared implementation. `rewritePremiumFlow` is `false` on 1.7.2 because the Boolean.FALSE
+ * adjacency heuristic for the premium `StateFlow` does not fire on the restructured 1.7.2
+ * emissions; the other 5 steps (1, 2, 4, 5, 6) still apply.
+ */
+private fun BytecodePatchContext.applyHmaUnlock(pins: HmaPins, rewritePremiumFlow: Boolean) {
+    // 1. Native-verdict wrapper always reports premium (headless + NativeHooker paths).
+    EvalBlobWrapperFingerprint.method.addInstructions(
+        0,
+        """
+            const/4 v0, 0x1
+            return v0
+        """,
+    )
 
-        // 2. Force every read of the premium flag field to true (UI badge + profile caps),
-        //    independent of login/token.
-        //
-        //    The flag is the volatile boolean of the LicenseStore (`Lbb/g;->c:Z` in 1.7.1). It has no
-        //    non-obfuscated anchor (encrypted strings; the field is set from the wrapper in a coroutine
-        //    state machine that cannot be fingerprinted across its fragments), so the reference is
-        //    pinned for this version. Every `iget-boolean` of it is rewritten to a constant true.
-        val flagClass = "Lbb/g;"
-        val flagName = "c"
-        fun isFlagRead(instruction: com.android.tools.smali.dexlib2.iface.instruction.Instruction): Boolean {
-            if (instruction.opcode != Opcode.IGET_BOOLEAN) return false
-            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference ?: return false
-            return reference.definingClass == flagClass && reference.name == flagName
-        }
+    // 2. Force every read of the LicenseStore premium flag to true.
+    //
+    //    The flag is the volatile boolean of the LicenseStore (a per-version pin; see [HmaPins]).
+    //    It has no non-obfuscated anchor (encrypted string pool; the flag is set from the wrapper
+    //    in a coroutine state machine that cannot be fingerprinted across its fragments), so the
+    //    reference is pinned for this version. Every `iget-boolean` of it is rewritten to a
+    //    constant `true`.
+    val flagClass = pins.flagClass
+    val flagName = pins.flagName
+    fun isFlagRead(instruction: Instruction): Boolean {
+        if (instruction.opcode != Opcode.IGET_BOOLEAN) return false
+        val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            ?: return false
+        return reference.definingClass == flagClass && reference.name == flagName
+    }
 
-        classDefForEach { classDef ->
-            classDef.methods.forEach forEachMethod@{ method ->
-                val original = method.implementation ?: return@forEachMethod
-                val indices = original.instructions.withIndex()
-                    .filter { isFlagRead(it.value) }
-                    .map { it.index }
-                if (indices.isEmpty()) return@forEachMethod
+    classDefForEach { classDef ->
+        classDef.methods.forEach forEachMethod@{ method ->
+            val original = method.implementation ?: return@forEachMethod
+            val indices = original.instructions.withIndex()
+                .filter { isFlagRead(it.value) }
+                .map { it.index }
+            if (indices.isEmpty()) return@forEachMethod
 
-                val mutableMethod = mutableClassDefBy(classDef).methods.first {
-                    it.name == method.name &&
-                        it.returnType == method.returnType &&
-                        it.parameterTypes.toList() == method.parameterTypes.toList()
-                }
-                // Rewrite from last to first so earlier indexes stay valid.
-                indices.sortedDescending().forEach { index ->
-                    val register = mutableMethod.getInstruction<OneRegisterInstruction>(index).registerA
-                    mutableMethod.replaceInstruction(index, "const/4 v$register, 0x1")
-                }
+            val mutableMethod = mutableClassDefBy(classDef).methods.first {
+                it.name == method.name &&
+                    it.returnType == method.returnType &&
+                    it.parameterTypes.toList() == method.parameterTypes.toList()
+            }
+            // Rewrite from last to first so earlier indexes stay valid.
+            indices.sortedDescending().forEach { index ->
+                val register = mutableMethod.getInstruction<OneRegisterInstruction>(index).registerA
+                mutableMethod.replaceInstruction(index, "const/4 v$register, 0x1")
             }
         }
+    }
 
-        // 3. Force the premium StateFlow to emit `true`, so the account badge and the profile
-        //    counter render premium even with no account.
-        //
-        //    The field read in step 2 drives enforcement (profile caps, headless/spoof gates), but the
-        //    UI badge ("Free Account" / "x/5") observes a separate StateFlow, `Lpa/v0;->j:Lfd/h0;`.
-        //    The account view-model pushes `Boolean.FALSE` into it on the guest path (no session token)
-        //    and on a failed-validation path; both emissions, plus the field initialiser, load the
-        //    value with `sget-object ... Ljava/lang/Boolean;->FALSE`. Every such `FALSE` load that sits
-        //    next to an access of the `j` flow field is rewritten to `TRUE`, so the flow carries
-        //    premium regardless of login state. Reference pinned for 1.7.1 (encrypted strings; the
-        //    emissions are spread across a coroutine state machine with no fingerprintable anchor).
-        val flowClass = "Lpa/v0;"
-        val flowField = "j"
-        fun isFlowAccess(instruction: com.android.tools.smali.dexlib2.iface.instruction.Instruction): Boolean {
+    // 3. (1.7.1 only) Force the premium StateFlow to emit `true`, so the account badge and the
+    //    profile counter render premium with no account. The flow is a per-version pin; on 1.7.2
+    //    the emissions are restructured and the Boolean.FALSE adjacency heuristic does not match,
+    //    so the rewrite is skipped.
+    if (rewritePremiumFlow) {
+        // NOTE: the flow pin is not part of HmaPins because 1.7.2 skips this step entirely.
+        // Keep the 1.7.1 pins here.
+        val flowClass171 = "Lpa/v0;"
+        val flowField171 = "j"
+        fun isFlowAccess(instruction: Instruction): Boolean {
             if (instruction.opcode != Opcode.IGET_OBJECT && instruction.opcode != Opcode.IPUT_OBJECT) return false
-            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference ?: return false
-            return reference.definingClass == flowClass && reference.name == flowField
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+                ?: return false
+            return reference.definingClass == flowClass171 && reference.name == flowField171
         }
-        fun isBooleanFalse(instruction: com.android.tools.smali.dexlib2.iface.instruction.Instruction): Boolean {
+        fun isBooleanFalse(instruction: Instruction): Boolean {
             if (instruction.opcode != Opcode.SGET_OBJECT) return false
-            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference ?: return false
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+                ?: return false
             return reference.definingClass == "Ljava/lang/Boolean;" && reference.name == "FALSE"
         }
 
         classDefForEach { classDef ->
-            if (classDef.type != flowClass) return@classDefForEach
+            if (classDef.type != flowClass171) return@classDefForEach
             classDef.methods.forEach forEachMethod@{ method ->
                 val original = method.implementation ?: return@forEachMethod
                 val list = original.instructions.toList()
-                // A `FALSE` load feeds the premium flow if a `j`-field access is within a few
-                // instructions of it (the load, the flow `iget`/`iput`, and the emit are adjacent).
                 val indices = list.indices.filter { i ->
                     isBooleanFalse(list[i]) &&
                         (maxOf(0, i - 6)..minOf(list.lastIndex, i + 6)).any { isFlowAccess(list[it]) }
@@ -143,76 +130,116 @@ val unlockPremiumPatch = bytecodePatch(
                 }
             }
         }
+    }
 
-        // 4. Force every DEX `DeviceInfoProvider.evalBlobNative(...)` gate to true.
-        //
-        //    A whole class of features (SIM identity in ta.o0; IMEI/GAID/OAID/MediaDRM/AppSetId in
-        //    ta.q; Bluetooth MAC; the AccountManager suite in ta.v0; LAN-scan-block; WiFi SSID/BSSID)
-        //    is coded but never places its hooks because the hook-registrar branch is gated on a
-        //    DIRECT native `evalBlobNative(...)` call (not the `f()` wrapper), and that native call is
-        //    not honoured at these sites even with the `.so` patched. Each gate is
-        //    `invoke evalBlobNative; move-result vX; if-eqz vX, :skip`. Override the boolean result of
-        //    every such call with a constant `true`, so the registrars place their hooks.
-        fun isEvalBlob(instruction: com.android.tools.smali.dexlib2.iface.instruction.Instruction): Boolean {
-            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference ?: return false
-            return reference.definingClass == "Lcom/wowsoftware/hidemyandroid/jni/DeviceInfoProvider;" &&
-                reference.name == "evalBlobNative"
-        }
-        classDefForEach { classDef ->
-            classDef.methods.forEach forEachMethod@{ method ->
-                val original = method.implementation ?: return@forEachMethod
-                val list = original.instructions.toList()
-                val moveResultIndices = list.indices.filter { i ->
-                    i > 0 && isEvalBlob(list[i - 1]) && list[i].opcode == Opcode.MOVE_RESULT
-                }
-                if (moveResultIndices.isEmpty()) return@forEachMethod
+    // 4. Force every DEX `DeviceInfoProvider.evalBlobNative(...)` gate to true.
+    //
+    //    A whole class of features (SIM identity, IMEI, GAID, OAID, MediaDRM, BT MAC, virtual
+    //    accounts, WiFi SSID/BSSID, LAN-scan-block) is coded but never places its hooks because
+    //    the hook-registrar branch is gated on a DIRECT native `evalBlobNative(...)` call. Each
+    //    gate is `invoke evalBlobNative; move-result vX; if-eqz vX, :skip`. Override the boolean
+    //    result of every such call with a constant `true`, so the registrars place their hooks.
+    fun isEvalBlob(instruction: Instruction): Boolean {
+        val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            ?: return false
+        return reference.definingClass ==
+            "Lcom/wowsoftware/hidemyandroid/jni/DeviceInfoProvider;" &&
+            reference.name == "evalBlobNative"
+    }
+    classDefForEach { classDef ->
+        classDef.methods.forEach forEachMethod@{ method ->
+            val original = method.implementation ?: return@forEachMethod
+            val list = original.instructions.toList()
+            val moveResultIndices = list.indices.filter { i ->
+                i > 0 && isEvalBlob(list[i - 1]) && list[i].opcode == Opcode.MOVE_RESULT
+            }
+            if (moveResultIndices.isEmpty()) return@forEachMethod
 
-                val mutableMethod = mutableClassDefBy(classDef).methods.first {
-                    it.name == method.name &&
-                        it.returnType == method.returnType &&
-                        it.parameterTypes.toList() == method.parameterTypes.toList()
-                }
-                moveResultIndices.sortedDescending().forEach { index ->
-                    val register = mutableMethod.getInstruction<OneRegisterInstruction>(index).registerA
-                    val constInsn = if (register < 16) "const/4 v$register, 0x1" else "const/16 v$register, 0x1"
-                    mutableMethod.replaceInstruction(index, constInsn)
-                }
+            val mutableMethod = mutableClassDefBy(classDef).methods.first {
+                it.name == method.name &&
+                    it.returnType == method.returnType &&
+                    it.parameterTypes.toList() == method.parameterTypes.toList()
+            }
+            moveResultIndices.sortedDescending().forEach { index ->
+                val register = mutableMethod.getInstruction<OneRegisterInstruction>(index).registerA
+                val constInsn = if (register < 16) "const/4 v$register, 0x1"
+                                else "const/16 v$register, 0x1"
+                mutableMethod.replaceInstruction(index, constInsn)
             }
         }
+    }
 
-        // 5. Force the cached-licence-blob field non-empty so the Tier-2 gate passes.
-        //
-        //    The advanced-identifier registrars (IMEI/GAID/OAID/MediaDRM in ta.q, the SIM suite in
-        //    ta.o0, Bluetooth MAC, the AccountManager suite in ta.v0) wrap their hook registration in
-        //    `if (jVar.str.length() > 0) { if (evalBlobNative(jVar.str, ...) && ...) { ... } }`, where
-        //    `jVar` is the single `wa.j` identity built in the framework hook manager and `jVar.str`
-        //    (smali field `Lwa/j;->a`) is the cached signed-licence blob. With no licence the blob is
-        //    empty, so the whole Tier-2 block is skipped regardless of the `f()` patch. The spoof
-        //    values come from the profile config (e.g. `simConfig`), not from the blob, so forcing the
-        //    field to a non-empty constant unlocks the whole tier. Ref pinned to 1.7.1 (`Lwa/j;->a`).
-        classDefForEach { classDef ->
-            if (classDef.type != "Lwa/j;") return@classDefForEach
-            classDef.methods.filter { it.name == "<init>" }.forEach forEachCtor@{ method ->
-                val impl = method.implementation ?: return@forEachCtor
-                val index = impl.instructions.withIndex().firstOrNull { (_, insn) ->
-                    insn.opcode == Opcode.IPUT_OBJECT &&
-                        ((insn as? ReferenceInstruction)?.reference as? FieldReference)?.let {
-                            it.definingClass == "Lwa/j;" && it.name == "a"
-                        } == true
-                }?.index ?: return@forEachCtor
+    // 5. Force the cached-licence-blob field non-empty so the Tier-2 gate passes.
+    //
+    //    The advanced-identifier registrars wrap their hook registration in
+    //    `if (jVar.str.length() > 0) { if (evalBlobNative(jVar.str, ...) && ...) { ... } }`,
+    //    where `jVar` is the per-version identity built in the framework hook manager. The
+    //    blob field is pinned for this version (see [HmaPins]). With no licence the blob is
+    //    empty, so the whole Tier-2 block is skipped. Forcing the field to a non-empty
+    //    constant unlocks the whole tier; spoof values still come from the profile config.
+    classDefForEach { classDef ->
+        if (classDef.type != pins.blobClass) return@classDefForEach
+        classDef.methods.filter { it.name == "<init>" }.forEach forEachCtor@{ method ->
+            val impl = method.implementation ?: return@forEachCtor
+            val index = impl.instructions.withIndex().firstOrNull { (_, insn) ->
+                insn.opcode == Opcode.IPUT_OBJECT &&
+                    ((insn as? ReferenceInstruction)?.reference as? FieldReference)?.let {
+                        it.definingClass == pins.blobClass && it.name == "a"
+                    } == true
+            }?.index ?: return@forEachCtor
 
-                val mutableMethod = mutableClassDefBy(classDef).methods.first {
-                    it.name == method.name &&
-                        it.parameterTypes.toList() == method.parameterTypes.toList()
-                }
-                val valueReg = mutableMethod.getInstruction<TwoRegisterInstruction>(index).registerA
-                // Insert directly before the store, so the field receives the constant.
-                mutableMethod.addInstructions(index, "const-string v$valueReg, \"1\"")
+            val mutableMethod = mutableClassDefBy(classDef).methods.first {
+                it.name == method.name &&
+                    it.parameterTypes.toList() == method.parameterTypes.toList()
             }
+            val valueReg = mutableMethod.getInstruction<TwoRegisterInstruction>(index).registerA
+            // Insert directly before the store, so the field receives the constant.
+            mutableMethod.addInstructions(index, "const-string v$valueReg, \"1\"")
         }
+    }
 
-        // 6. Neutralise the native anti-tamper so the re-signed APK is not killed at startup.
-        BootstrapRuntimeCallerFingerprint.method.addInstructions(0, "return-void")
-        InstallWatchdogCallerFingerprint.method.addInstructions(0, "return-void")
+    // 6. Neutralise the native anti-tamper so the re-signed APK is not killed at startup.
+    BootstrapRuntimeCallerFingerprint.method.addInstructions(0, "return-void")
+    InstallWatchdogCallerFingerprint.method.addInstructions(0, "return-void")
+}
+
+/**
+ * 1.7.1 (versionCode 171) — original pins.
+ */
+@Suppress("unused")
+val unlockPremiumPatch171 = bytecodePatch(
+    name = "Unlock premium",
+    description = "Unlocks the premium feature set offline, without a subscription.",
+    default = true,
+) {
+    compatibleWith(COMPATIBILITY_HIDEMYANDROID_171)
+    execute {
+        applyHmaUnlock(
+            pins = HmaPins(flagClass = "Lbb/g;", flagName = "c", blobClass = "Lwa/j;"),
+            rewritePremiumFlow = true,
+        )
+    }
+}
+
+/**
+ * 1.7.2 (versionCode 172) — re-derived pins (see `Constants.COMPATIBILITY_HIDEMYANDROID_172`
+ * kdoc for the mapping). The premium-flow UI badge rewrite is skipped because the 1.7.2
+ * emission pattern no longer matches the Boolean.FALSE adjacency heuristic; tier-2 hooks and
+ * the LicenseStore flag still unlock.
+ */
+@Suppress("unused")
+val unlockPremiumPatch172 = bytecodePatch(
+    name = "Unlock premium",
+    description = "Unlocks the premium feature set offline, without a subscription. " +
+        "(1.7.2: UI badge premium-flow emission pattern changed and is not auto-rewritten; " +
+        "tier-2 hooks and LicenseStore flag still unlock.)",
+    default = true,
+) {
+    compatibleWith(COMPATIBILITY_HIDEMYANDROID_172)
+    execute {
+        applyHmaUnlock(
+            pins = HmaPins(flagClass = "Lcb/h;", flagName = "c", blobClass = "Lxa/k;"),
+            rewritePremiumFlow = false,
+        )
     }
 }
