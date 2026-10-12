@@ -1,0 +1,23 @@
+## [1.0.0-dev.4](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.3...v1.0.0-dev.4) (2026-10-12)
+
+### 🐛 Bug Fixes
+
+* Remove broken 1.7.2 flow init rewrite (VerifyError on launch) ([d6a46ff](https://github.com/Arsylk/arsylk-patches/commit/d6a46ff3458a62ced476fc45baa2391f040e088f))
+
+## [1.0.0-dev.3](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.2...v1.0.0-dev.3) (2026-10-12)
+
+### 🐛 Bug Fixes
+
+* Give 1.7.2 Hide My Android patch full coverage (premium StateFlow init) ([08eea42](https://github.com/Arsylk/arsylk-patches/commit/08eea4237babf3bfebfe18e1a6a614600b0d7dab))
+
+## [1.0.0-dev.2](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.1...v1.0.0-dev.2) (2026-10-12)
+
+### ✨ New Features
+
+* Ship multi-version patches (1.7.1 + 1.7.2) for Hide My Android ([5bd116a](https://github.com/Arsylk/arsylk-patches/commit/5bd116a2f60fe0e87492ca817498483474152112))
+
+## 1.0.0-dev.1 (2026-10-12)
+
+### ✨ New Features
+
+* Added Hide My Android and Hide My Emulator premium unlock patches ([95c52f5](https://github.com/Arsylk/arsylk-patches/commit/95c52f5d119b675c45b3b2a1af5c6fa79169f689))
