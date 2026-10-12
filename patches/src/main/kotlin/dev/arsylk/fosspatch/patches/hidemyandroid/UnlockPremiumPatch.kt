@@ -4,12 +4,10 @@ import dev.arsylk.fosspatch.patches.shared.Constants.COMPATIBILITY_HIDEMYANDROID
 import dev.arsylk.fosspatch.patches.shared.Constants.COMPATIBILITY_HIDEMYANDROID_172
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
-import app.morphe.patcher.extensions.InstructionExtensions.removeInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
@@ -31,15 +29,6 @@ private data class HmaPins(
     /** Cached signed-licence blob identity — step 5 inserts `const-string "1"` before the
      *  `iput-object` into its `<init>`. */
     val blobClass: String,
-    /**
-     * 1.7.2+ only: the obfuscated class that holds the helper creating the premium
-     * `MutableStateFlow` via the kotlinx factory `Ll6/c;->a(IILfd/a;)Lfd/e;`. The Boolean initial
-     * value (the factory's 3rd arg) is rewritten to `0x1` so the flow starts as premium. Runtime
-     * FALSE emissions to the flow go through coroutine `update` lambdas that are guarded by the
-     * LicenseStore flag rewritten in step 2, so the flow stays TRUE. `null` to skip this step
-     * (1.7.1, where the Boolean.FALSE-adjacency rewrite in step 3 already covers the flow).
-     */
-    val flowInitClass: String? = null,
 )
 
 /**
@@ -143,47 +132,6 @@ private fun BytecodePatchContext.applyHmaUnlock(pins: HmaPins, rewritePremiumFlo
         }
     }
 
-    // 3b. (1.7.2+) Rewrite the premium `MutableStateFlow`'s initial value to TRUE.
-    //
-    //    The Boolean.FALSE-adjacency rewrite above does not fire on 1.7.2 (the emissions go
-    //    through coroutine `update` lambdas with the Boolean.FALSE `sget-object` scattered
-    //    across state-machine fragments that cannot be tied back to the premium flow without
-    //    a full dataflow pass). Instead, we force the flow to START as TRUE by overwriting the
-    //    Boolean register passed to the kotlinx `MutableStateFlow` factory
-    //    `Ll6/c;->a(IILfd/a;)Lfd/e;` — a `const/4 v?, 0x1` inserted directly before the
-    //    `invoke-static` overwrites the FALSE the code loaded. (Remove+reinsert was avoided:
-    //    `removeInstruction` + `addInstructions` at the same index dropped the narrow literal
-    //    back to 0 in this patcher build, so we insert a fresh overwrite load instead.)
-    //    The guest-path runtime emissions to the flow read the LicenseStore flag (rewritten to
-    //    TRUE in step 2) and never fire the FALSE branch, so the flow stays TRUE.
-    val flowInitClass = pins.flowInitClass
-    if (flowInitClass != null) {
-        classDefForEach { classDef ->
-            if (classDef.type != flowInitClass) return@classDefForEach
-            val mutable = mutableClassDefBy(classDef)
-            classDef.methods.forEach forEachInitMethod@{ method ->
-                val impl = method.implementation ?: return@forEachInitMethod
-                val original = impl.instructions.toList()
-                for ((i, insn) in original.withIndex()) {
-                    val ref = (insn as? ReferenceInstruction)?.reference as? MethodReference
-                        ?: continue
-                    if (ref.definingClass != "Ll6/c;") continue
-                    if (ref.name != "a") continue
-                    if (ref.parameterTypes.size != 3 || ref.parameterTypes[2] != "Lfd/a;") continue
-                    // The factory's 3rd arg register holds the Boolean initial value.
-                    // Insert a TRUE load right before the call, overwriting whatever was there.
-                    val initReg = (insn as FiveRegisterInstruction).registerE
-                    val mutableMethod = mutable.methods.first {
-                        it.name == method.name &&
-                            it.returnType == method.returnType &&
-                            it.parameterTypes.toList() == method.parameterTypes.toList()
-                    }
-                    mutableMethod.addInstructions(i, "const/4 v$initReg, 0x1")
-                }
-            }
-        }
-    }
-
     // 4. Force every DEX `DeviceInfoProvider.evalBlobNative(...)` gate to true.
     //
     //    A whole class of features (SIM identity, IMEI, GAID, OAID, MediaDRM, BT MAC, virtual
@@ -282,21 +230,13 @@ val unlockPremiumPatch171 = bytecodePatch(
 @Suppress("unused")
 val unlockPremiumPatch172 = bytecodePatch(
     name = "Unlock premium",
-    description = "Unlocks the premium feature set offline, without a subscription. " +
-        "(1.7.2: full coverage — premium `MutableStateFlow` initial value forced TRUE; " +
-        "runtime emissions are guarded by the LicenseStore flag rewritten in step 2, " +
-        "so the flow stays TRUE.)",
+    description = "Unlocks the premium feature set offline, without a subscription.",
     default = true,
 ) {
     compatibleWith(COMPATIBILITY_HIDEMYANDROID_172)
     execute {
         applyHmaUnlock(
-            pins = HmaPins(
-                flagClass = "Lcb/h;",
-                flagName = "c",
-                blobClass = "Lxa/k;",
-                flowInitClass = "Le0/n1;",
-            ),
+            pins = HmaPins(flagClass = "Lcb/h;", flagName = "c", blobClass = "Lxa/k;"),
             rewritePremiumFlow = false,
         )
     }
