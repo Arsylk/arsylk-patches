@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.0.0-dev.1",
+  "version": "1.0.0-dev.2",
   "patches": [
     {
       "name": "Unlock premium",
@@ -26,11 +26,34 @@
               "isExperimental": false,
               "minSdk": null,
               "description": null
-            },
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Unlock premium",
+      "description": "Unlocks the premium feature set offline, without a subscription. (1.7.2: UI badge premium-flow emission pattern changed and is not auto-rewritten; tier-2 hooks and LicenseStore flag still unlock.)",
+      "default": true,
+      "category": null,
+      "dependencies": [],
+      "compatiblePackages": [
+        {
+          "packageName": "com.wowsoftware.hidemyandroid",
+          "name": "Hide My Android",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#3DDC84",
+          "signatures": null,
+          "targets": [
             {
-              "version": null,
-              "versionCodes": null,
-              "isExperimental": true,
+              "version": "1.7.2",
+              "versionCodes": {
+                "ARM64_V8A": 172,
+                "ARMEABI_V7A": 172
+              },
+              "isExperimental": false,
               "minSdk": null,
               "description": null
             }
@@ -61,13 +84,6 @@
                 "X86_64": 4
               },
               "isExperimental": false,
-              "minSdk": null,
-              "description": null
-            },
-            {
-              "version": null,
-              "versionCodes": null,
-              "isExperimental": true,
               "minSdk": null,
               "description": null
             }
