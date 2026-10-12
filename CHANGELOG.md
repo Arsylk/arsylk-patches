@@ -1,3 +1,9 @@
+## [1.0.0-dev.4](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.3...v1.0.0-dev.4) (2026-10-12)
+
+### 🐛 Bug Fixes
+
+* Remove broken 1.7.2 flow init rewrite (VerifyError on launch) ([d6a46ff](https://github.com/Arsylk/arsylk-patches/commit/d6a46ff3458a62ced476fc45baa2391f040e088f))
+
 ## [1.0.0-dev.3](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.2...v1.0.0-dev.3) (2026-10-12)
 
 ### 🐛 Bug Fixes

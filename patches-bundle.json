@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-12T06:34:02",
-  "description": "## [1.0.0-dev.3](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.2...v1.0.0-dev.3) (2026-10-12)\n\n### 🐛 Bug Fixes\n\n* Give 1.7.2 Hide My Android patch full coverage (premium StateFlow init) ([08eea42](https://github.com/Arsylk/arsylk-patches/commit/08eea4237babf3bfebfe18e1a6a614600b0d7dab))",
-  "download_url": "https://github.com/Arsylk/arsylk-patches/releases/download/v1.0.0-dev.3/patches-1.0.0-dev.3.mpp",
+  "created_at": "2026-10-12T07:06:42",
+  "description": "## [1.0.0-dev.4](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0-dev.3...v1.0.0-dev.4) (2026-10-12)\n\n### 🐛 Bug Fixes\n\n* Remove broken 1.7.2 flow init rewrite (VerifyError on launch) ([d6a46ff](https://github.com/Arsylk/arsylk-patches/commit/d6a46ff3458a62ced476fc45baa2391f040e088f))",
+  "download_url": "https://github.com/Arsylk/arsylk-patches/releases/download/v1.0.0-dev.4/patches-1.0.0-dev.4.mpp",
   "signature_download_url": "",
-  "version": "1.0.0-dev.3"
+  "version": "1.0.0-dev.4"
 }
