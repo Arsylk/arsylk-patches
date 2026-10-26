@@ -94,4 +94,34 @@ object Constants {
             ),
         ),
     )
+
+    /**
+     * Hide My Emulator 1.5 — licensing moved from the local `com.wowsoftware.hmelicense`
+     * ContentProvider handshake to a backend token flow (`HmeBackendLicenseRepo`): the app caches an
+     * opaque `license_token` (plus `device_id`, a server-time anchor and `cap_slot`) in prefs, and
+     * every premium gate re-validates it through `DeviceInfoProvider.evalBlobNative(...)` inside
+     * `libnative_entry.so`. The premium device profile is a token-bound blob that only
+     * `deriveCapBlobNative` can decrypt.
+     *
+     * The Java-side gates are still DEX-visible, so the per-target `bytecodePatch` in
+     * `patches/hidemyemulator/UnlockPremiumPatch.kt` can force them, and the companion
+     * `rawResourcePatch` removes the native gate in `deriveCapBlobNative` (the blob's key is
+     * library-internal, so the identity tier decrypts once the gate is rewritten). Both patches
+     * together give the full offline unlock. See the patch kdocs.
+     */
+    val COMPATIBILITY_HIDEMYEMULATOR_15 = Compatibility(
+        name = "Hide My Emulator",
+        packageName = "net.wowsoftware.hidemyemulator",
+        apkFileType = ApkFileType.APK,
+        appIconColor = 0x3DDC84,
+        targets = listOf(
+            AppTarget(
+                version = "1.5",
+                versionCodes = mapOf(
+                    SupportedAbi.ARM64_V8A to 6,
+                    SupportedAbi.X86_64 to 6,
+                ),
+            ),
+        ),
+    )
 }
