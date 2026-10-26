@@ -70,6 +70,37 @@ object Constants {
     )
 
     /**
+     * 1.7.5 re-derived pins. The non-obfuscated `DeviceInfoProvider` JNI anchors survive. The
+     * three obfuscated pins moved again:
+     *   - LicenseStore premium flag: `Lcb/h;->c:Z`  ->  `Leb/h;->c:Z`  (same field name; class
+     *     reshuffled from package `cb` to `eb`). Still written straight from the eval wrapper
+     *     `DeviceInfoProvider.f(...)Z` in the validate coroutine `Lsa/h1;`.
+     *   - Tier-2 identity (cached signed-licence blob): `Lxa/k;->a:Ljava/lang/String;`
+     *     ->  `Lza/s;->a:Ljava/lang/String;`  (same field name; identity object moved from
+     *     package `xa` to `za`, and is constructed in `Lza/s;-><init>`).
+     *   - Account-gated premium state: the premium `MutableStateFlow` lives in the
+     *     `StartupRepository` (`Lsa/l1;->j:Lid/g0;`, created `Boolean.FALSE`, no-token and
+     *     token-refresh-failure paths emit FALSE; the account VM `Lgb/c;` logout also emits
+     *     FALSE into it) — the 1.7.2 `Lqa/v0;` / `Lqa/z0;` pair moved to `Lsa/l1;` / `Lgb/c;`.
+     */
+    val COMPATIBILITY_HIDEMYANDROID_175 = Compatibility(
+        name = "Hide My Android",
+        packageName = "com.wowsoftware.hidemyandroid",
+        apkFileType = ApkFileType.APK,
+        // App icon is predominantly green.
+        appIconColor = 0x3DDC84,
+        targets = listOf(
+            AppTarget(
+                version = "1.7.5",
+                versionCodes = mapOf(
+                    SupportedAbi.ARM64_V8A to 175,
+                    SupportedAbi.ARMEABI_V7A to 175,
+                ),
+            ),
+        ),
+    )
+
+    /**
      * Hide My Emulator — emulator-hiding Xposed/LSPlant module. Premium (device masking) is licensed
      * through a separate paid Google Play app, `com.wowsoftware.hmelicense`, and cached locally as an
      * expiry timestamp; masking runs only while that timestamp is in the future.
