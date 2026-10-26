@@ -1,4 +1,4 @@
-## [1.2.0-dev.1](https://github.com/Arsylk/arsylk-patches/compare/v1.1.0...v1.2.0-dev.1) (2026-10-26)
+## [1.2.0](https://github.com/Arsylk/arsylk-patches/compare/v1.1.0...v1.2.0) (2026-10-26)
 
 ### ✨ New Features
 
