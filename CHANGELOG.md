@@ -1,3 +1,9 @@
+## [1.2.0-dev.1](https://github.com/Arsylk/arsylk-patches/compare/v1.1.0...v1.2.0-dev.1) (2026-10-26)
+
+### ✨ New Features
+
+* Support Hide My Android 1.7.5 ([7f2ce42](https://github.com/Arsylk/arsylk-patches/commit/7f2ce424bcf7e46a204480536136769bbed9e582))
+
 ## [1.1.0](https://github.com/Arsylk/arsylk-patches/compare/v1.0.0...v1.1.0) (2026-10-26)
 
 ### ✨ New Features
